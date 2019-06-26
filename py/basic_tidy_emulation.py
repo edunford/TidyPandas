@@ -16,15 +16,53 @@ class TidyPandas:
     def __init__(self, pandas_obj):
         self._obj = pandas_obj
 
+    # AUXILIARY FUNCTIONS --------------
+    def unique_list(list_entry=[]):
+        '''doc'''
+        seen = set()
+        seen_add = seen.add
+        return [i for i in list_entry if not (i in seen or seen_add(i))]
+
+
+    def unique_columns(d):
+        '''doc'''
+        return d.loc[:,~d.columns.duplicated()]
+
+
+    def parse_statement(self,statement):
+        '''
+        Parsing method for quotation statement into dictionary for evaluation.
+        '''
+        open = True
+        statement_cleaned = ""
+        for text in statement:
+
+            if text == "(":
+                open = False
+            elif text == ")":
+                open = True
+
+            if open and text == ",":
+                statement_cleaned += "<::>"
+            else:
+                statement_cleaned += text
+
+        tmp = statement_cleaned.split('<::>')
+        states = {entry.split('=')[0].strip():entry.split('=')[1].strip() for entry in tmp}
+        return states
+
+
+    # DPLYR EMULATORS ---------------------------------
+
     def select(self,statement):
         '''
         complete mimic of dplyr's select() function.
 
         [More detail needed here]
+        Add ... as a place holder for everything
         '''
-        tmp = statement.split(',') # parse sentence
-
         # Track variable name reassignments
+        tmp = statement.split(',') # parse sentence
         reassignments = {entry.split('=')[1].strip():entry.split('=')[0].strip() for entry in tmp if "=" in entry}
         all_columns =list(self._obj) # record all variables
         reordering = [] # parse how columns should be reordered.
@@ -34,18 +72,23 @@ class TidyPandas:
             elif "-" in i:
                 i = i.replace("-","")
                 all_columns.remove(i.strip())
-            elif ("*" in i):
+            elif "*" in i:
                 grab_entries = list(filter(re.compile(f"{i}").match, all_columns))
                 for new_entry in grab_entries:
                     reordering.append(new_entry.strip())
             else:
                 reordering.append(i.strip())
 
+        if statement.strip()[-3:] == "...":
+            for c in all_columns:
+                if c not in reordering:
+                    reordering.append(c)
+
         # if only dropping variables.
         if len(reordering) == 0:
             reordering = all_columns
 
-        return self._obj.rename(columns=reassignments).filter(reordering)
+        return unique_columns(self._obj.rename(columns=reassignments).filter(reordering))
 
 
     def rename(self,statement):
@@ -66,33 +109,47 @@ class TidyPandas:
         [More documentation here]
         '''
         # Parse statement and conditions
-        tmp = statement.split(',')
-        states = {entry.split('=')[0].strip():entry.split('=')[1].strip() for entry in tmp}
+        states = self.parse_statement(statement)
         data_handle = "self._obj."
         columns = list(self._obj)
 
         # Supply data handles (when need be)
-        for key,val in states.items():
+        for key, val in states.items():
+
             for c in columns:
                 if c in val:
                     val = val.replace(c,data_handle + c)
             self._obj[key] = eval(val)
-            columns = list(self._obj) # Update the new columns
 
-        return self._obj
+            if key not in columns:
+                columns.append(key) # Update the new columns
 
-
+        return self._obj.filter(columns)
 
 
 # %% Test
 
-def my_add(x,y):
-    return x + y
+def my_add(a,b):
+    return a + b
 
+
+df.head(1)
 (df.
- tidy.select("yy = carat,z, dd = depth, *c").
- tidy.rename("col=color").
+ tidy.select("z, cut, color, y, depth, this = x").
+ # tidy.rename("col=color").
  sample(4).
- tidy.mutate('rr = cut + "_" + col, clarity = clarity.str.title()')
- # tidy.select("clarity, rr")
+ tidy.mutate('zz = np.add(z,this), rr = cut + "_" + color').
+ tidy.select("this, cut, rr, y, ...")
 )
+
+
+
+# %%
+
+
+
+d =  pd.DataFrame(dict(A=[1,2],B=[2,3])).filter(["A","B","A"])
+d
+
+def unique_columns(d):
+    return d.loc[:,~d.columns.duplicated()]
