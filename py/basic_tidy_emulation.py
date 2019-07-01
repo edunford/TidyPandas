@@ -66,11 +66,11 @@ class TidyPandas:
             for p in parsed3:
                 if len(p) == 2:
                     for c in columns:
-                        if c in p[1]:
+                        if c in p[1] and '"' not in p[1]:
                             p[1] = p[1].replace(c,data_handle + c)
                 elif len(p) == 1:
                     for c in columns:
-                        if c in p[0]:
+                        if c in p[0] and '"' not in p[0]:
                             p[0] = p[0].replace(c,data_handle + c)
 
             # Reconstruct statement
@@ -153,6 +153,7 @@ class TidyPandas:
 
             if key not in columns:
                 columns.append(key) # Update the new columns
+                states = self.parse_mutate_statement(statement,columns,"self._obj.")
 
         return self._obj.filter(columns)
 
@@ -162,14 +163,9 @@ class TidyPandas:
 def my_add(a,b):
     return a + b
 
-df.head(1)
 (df.
- tidy.select("z, cut, color, y, depth, this = x").
- # tidy.rename("col=color").
+ tidy.select("z, color, cut, y, depth, this = x").
+ tidy.rename("col=color").
  sample(4).
- tidy.mutate('zz = my_add(z,this), rr  = cut + "_zeta"')
- # tidy.select("this, cut, rr, y, ...")
+ tidy.mutate('this = my_add( z, this), rr  = np.log(y + this**z)')
 )
-
-
-# %%
