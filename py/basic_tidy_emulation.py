@@ -16,7 +16,7 @@ class TidyPandas:
     def __init__(self, pandas_obj):
         self._obj = pandas_obj
 
-    # AUXILIARY FUNCTIONS --------------
+    # AUXILIARY METHODS --------------
     def unique_list(list_entry=[]):
         '''doc'''
         seen = set()
@@ -24,7 +24,7 @@ class TidyPandas:
         return [i for i in list_entry if not (i in seen or seen_add(i))]
 
 
-    def unique_columns(d):
+    def unique_columns(self,d):
         '''doc'''
         return d.loc[:,~d.columns.duplicated()]
 
@@ -50,6 +50,40 @@ class TidyPandas:
         tmp = statement_cleaned.split('<::>')
         states = {entry.split('=')[0].strip():entry.split('=')[1].strip() for entry in tmp}
         return states
+
+
+    def parse_mutate_statement(self,statement = None,columns = None,data_handle = None):
+        '''
+        Internal method for parsing mutate expressions so that function calls are ignored
+        when allocating the data handle.
+        '''
+        parsed = self.parse_statement(statement)
+        for key, p in parsed.items():
+            parsed2 = [i for i in p.split(" ") if i not in [""]]
+            parsed3 = [p.split("(") for p in parsed2]
+
+            # allocate the data handles
+            for p in parsed3:
+                if len(p) == 2:
+                    for c in columns:
+                        if c in p[1]:
+                            p[1] = p[1].replace(c,data_handle + c)
+                elif len(p) == 1:
+                    for c in columns:
+                        if c in p[0]:
+                            p[0] = p[0].replace(c,data_handle + c)
+
+            # Reconstruct statement
+            new_statement = ""
+            for p in parsed3:
+                if len(p) == 1:
+                    new_statement += p[0] + " "
+                elif len(p) == 2:
+                    new_statement += p[0] + "(" + p[1] + " "
+
+            parsed[key] = new_statement
+
+        return parsed
 
 
     # DPLYR EMULATORS ---------------------------------
@@ -88,7 +122,7 @@ class TidyPandas:
         if len(reordering) == 0:
             reordering = all_columns
 
-        return unique_columns(self._obj.rename(columns=reassignments).filter(reordering))
+        return self.unique_columns(self._obj.rename(columns=reassignments).filter(reordering))
 
 
     def rename(self,statement):
@@ -109,16 +143,12 @@ class TidyPandas:
         [More documentation here]
         '''
         # Parse statement and conditions
-        states = self.parse_statement(statement)
-        data_handle = "self._obj."
         columns = list(self._obj)
+        states = self.parse_mutate_statement(statement,columns,"self._obj.")
 
         # Supply data handles (when need be)
         for key, val in states.items():
 
-            for c in columns:
-                if c in val:
-                    val = val.replace(c,data_handle + c)
             self._obj[key] = eval(val)
 
             if key not in columns:
@@ -132,24 +162,14 @@ class TidyPandas:
 def my_add(a,b):
     return a + b
 
-
 df.head(1)
 (df.
  tidy.select("z, cut, color, y, depth, this = x").
  # tidy.rename("col=color").
  sample(4).
- tidy.mutate('zz = np.add(z,this), rr = cut + "_" + color').
- tidy.select("this, cut, rr, y, ...")
+ tidy.mutate('zz = my_add(z,this), rr  = cut + "_zeta"')
+ # tidy.select("this, cut, rr, y, ...")
 )
 
 
-
 # %%
-
-
-
-d =  pd.DataFrame(dict(A=[1,2],B=[2,3])).filter(["A","B","A"])
-d
-
-def unique_columns(d):
-    return d.loc[:,~d.columns.duplicated()]
