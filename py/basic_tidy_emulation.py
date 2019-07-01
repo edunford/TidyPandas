@@ -90,7 +90,7 @@ class TidyPandas:
 
     def select(self,statement):
         '''
-        complete mimic of dplyr's select() function.
+        Emulator for dplyr's select().
 
         [More detail needed here]
         Add ... as a place holder for everything
@@ -110,6 +110,17 @@ class TidyPandas:
                 grab_entries = list(filter(re.compile(f"{i}").match, all_columns))
                 for new_entry in grab_entries:
                     reordering.append(new_entry.strip())
+            elif ":" in i:
+                parts = i.split(":")
+                on = False
+                for c in all_columns:
+                    if c == parts[0]:
+                        on = True
+                    elif c == parts[1]:
+                        on = False
+                        reordering.append(c)
+                    if on:
+                        reordering.append(c)
             else:
                 reordering.append(i.strip())
 
@@ -138,7 +149,7 @@ class TidyPandas:
 
     def mutate(self, statement):
         '''
-        Emulator for dplyr's mutate
+        Emulator for dplyr's mutate()
 
         [More documentation here]
         '''
@@ -152,14 +163,30 @@ class TidyPandas:
             self._obj[key] = eval(val)
 
             if key not in columns:
+                if "self._obj." in key:
+                    key = key.replace("self._obj.","")
                 columns.append(key) # Update the new columns
                 states = self.parse_mutate_statement(statement,columns,"self._obj.")
 
         return self._obj.filter(columns)
 
 
+    def filter(self,statement):
+        '''
+        Emulator for dplyr's filter()
+
+        [More documentation here]
+        '''
+        if "," in statement:
+            statement = statement.replace(","," and ")
+        return self._obj.query(statement)
+
+
+
 # %% Test
 
+
+# Example of locally defined function being incorporated.
 def my_add(a,b):
     return a + b
 
@@ -168,4 +195,27 @@ def my_add(a,b):
  tidy.rename("col=color").
  sample(4).
  tidy.mutate('this = my_add( z, this), rr  = np.log(y + this**z)')
+ # tidy.filter("rr == max(rr)")
 )
+
+
+# %%
+statement = "z > 7, y > 50"
+if "," in statement:
+    statement = statement.replace(","," and ")
+
+
+df.query("z >= mean(z)").head()
+
+statement
+if "," in statement:
+    statement = statement.replace(","," and ")
+updated_statement = "condition = "
+updated_statement += statement
+
+df.tidy.mutate("a = a > 1)").head()
+
+df.tidy.select("x,z,carat:color,y").head()
+
+(df.z > 3)
+help(pd.Series)
