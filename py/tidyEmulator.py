@@ -1,12 +1,6 @@
-import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 import pandas as pd
 import re
-sns.set_style('white')
-
-df = sns.load_dataset('diamonds')
-df.head(2)
 
 # %% Building a method that emulates dplyr functionality for pandas data objects.
 
@@ -86,6 +80,39 @@ class TidyPandas:
         return parsed
 
 
+    def conditional_placeholders(self, statement=None, put_back=False):
+        '''Insert place holders for all conditional expressions in a mutate statement'''
+        cond_ops = {">=":"<<ge>>","<=":"<<le>>",
+                    " or ":"<<or>>"," and ":"<<and>>",
+                    "&":"<<&>>","|":"<<|>>"}
+        if put_back:
+            for expr,filler in cond_ops.items():
+                if "and" in expr:
+                    statement = statement.replace(filler," & ")
+                elif "or" in expr:
+                    statement = statement.replace(filler," | ")
+                else:
+                    statement = statement.replace(filler,expr)
+        else:
+            for expr,filler in cond_ops.items():
+                    statement = statement.replace(expr,filler)
+        return statement
+
+
+    def format_conditionals(self,states=None):
+        '''Format all conditional statements'''
+        for key, val in states.items():
+            if "<<and>>" in states[key]:
+                states[key] = " <<and>> ".join(f"({i})" for i in states[key].split("<<and>>"))
+            elif "<<or>>" in states[key]:
+                states[key] = " <<or>> ".join(f"({i})" for i in states[key].split("<<or>>"))
+            elif "<<|>>" in states[key]:
+                states[key] = " <<|>> ".join(f"({i})" for i in states[key].split("<<|>>"))
+            elif "<<&>>" in states[key]:
+                states[key] = " <<&>> ".join(f"({i})" for i in states[key].split("<<&>>"))
+        return states
+
+
     # DPLYR EMULATORS ---------------------------------
 
     def select(self,statement):
@@ -155,20 +182,37 @@ class TidyPandas:
         '''
         # Parse statement and conditions
         columns = list(self._obj)
+
+        # Exchange conditionals for placeholders
+        statement = self.conditional_placeholders(statement)
+
+        # Parse statement
         states = self.parse_mutate_statement(statement,columns,"self._obj.")
+        states = self.format_conditionals(states)
+
+        # copy data object (to prevent writeover)
+        tmp_obj = self._obj.copy()
 
         # Supply data handles (when need be)
         for key, val in states.items():
 
-            self._obj[key] = eval(val)
+            # Convert place holders back
+            val = self.conditional_placeholders(val,put_back=True)
 
+            # Evaluate statement
+            # code = compile(f"t_ = {val}",'<string>', 'exec')
+            # exec(code)
+            # tmp_obj[key] = t_
+            tmp_obj[key] = eval(val)
+
+            # Retain new key
             if key not in columns:
                 if "self._obj." in key:
                     key = key.replace("self._obj.","")
                 columns.append(key) # Update the new columns
                 states = self.parse_mutate_statement(statement,columns,"self._obj.")
 
-        return self._obj.filter(columns)
+        return tmp_obj.filter(columns)
 
 
     def filter(self,statement):
@@ -186,6 +230,19 @@ class TidyPandas:
 # %% Test
 
 
+# BAKE IN A TIDY PRINT Emulator
+
+(df.
+ tidy.select('cut, table, color, x').
+ tidy.rename('ccc = cut').
+ tidy.mutate("new = x*5").
+ tidy.select("new,x, ...").
+ tidy.filter('color == "E"').
+ tidy.mutate('color = "A"')
+ .head()
+ )
+
+# %%
 # Example of locally defined function being incorporated.
 def my_add(a,b):
     return a + b
@@ -194,28 +251,7 @@ def my_add(a,b):
  tidy.select("z, color, cut, y, depth, this = x").
  tidy.rename("col=color").
  sample(4).
- tidy.mutate('this = my_add( z, this), rr  = np.log(y + this**z)')
+ tidy.mutate('this = my_add( z, this), rr  = (z >= np.mean(z) or depth <= 60)').
+ tidy.filter('rr')
  # tidy.filter("rr == max(rr)")
 )
-
-
-# %%
-statement = "z > 7, y > 50"
-if "," in statement:
-    statement = statement.replace(","," and ")
-
-
-df.query("z >= mean(z)").head()
-
-statement
-if "," in statement:
-    statement = statement.replace(","," and ")
-updated_statement = "condition = "
-updated_statement += statement
-
-df.tidy.mutate("a = a > 1)").head()
-
-df.tidy.select("x,z,carat:color,y").head()
-
-(df.z > 3)
-help(pd.Series)
